@@ -92,12 +92,16 @@ filter_undefined(Props) ->
     [{K, V} || {K, V} <- Props, V =/= undefined].
 
 escape(Msg) ->
-    lists:foldr(fun escape_char/2, [], Msg).
+    lists:foldr(fun(C, Acc) -> [escape_char(C) | Acc] end, [], Msg).
 
-escape_char($', Acc) ->
-    [$\\, $' | Acc];
-escape_char(Other, Acc) ->
-    [Other| Acc].
+escape_char($\n) -> "\\n";
+escape_char($\t) -> "\\t";
+escape_char($\b) -> "\\b";
+escape_char($\r) -> "\\r";
+escape_char($')  -> "\\'";
+escape_char($")  -> "\\\"";
+escape_char($\\) -> "\\\\";
+escape_char(C)   -> C.
 
 %%====================================================================
 %% tests
@@ -110,8 +114,10 @@ severity_test() ->
     ?assertEqual({"severity", "error"}, severity(Msg)).
 
 msg_test() ->
-    Msg = lager_msg:new("'msg'", error, [], []),
-    ?assertEqual({"msg", ["'", "\\'msg\\'", "'"]}, msg(Msg)).
+    Msg = lager_msg:new("\n\t\b\r'\"\\", error, [], []),
+    ?assertEqual({"msg", 
+                  ["'", ["\\n","\\t","\\b","\\r","\\'","\\\"","\\\\"], "'"]}, 
+                 msg(Msg)).
 
 meta_ignore_pid_test() ->
     Msg = lager_msg:new("msg", error, [{pid, list_to_pid("<0.1.0>")}], []),
