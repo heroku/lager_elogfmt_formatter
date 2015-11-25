@@ -1,0 +1,8 @@
+{application, 'lager_elogfmt_formatter',
+ [{description, "A lager formatter for logfmt and structured logs"},
+  {vsn, "0.1.0"},
+  {applications,
+   [kernel,
+    stdlib
+   ]}
+ ]}.

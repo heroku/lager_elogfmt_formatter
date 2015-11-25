@@ -1,0 +1,6 @@
+[{<<"elogfmt">>,
+  {git,"https://github.com/omarkj/elogfmt.git",
+       {ref,"e56fd9cec1b6eb48ce17d9917ab9dabc32e43cd0"}},
+  0},
+ {<<"goldrush">>,{pkg,<<"goldrush">>,<<"0.1.7">>},1},
+ {<<"lager">>,{pkg,<<"lager">>,<<"3.0.2">>},0}].
