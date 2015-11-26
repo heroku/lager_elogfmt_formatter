@@ -80,6 +80,11 @@ transform_meta([{_Key, undefined} | Rest], App, Acc) ->
     transform_meta(Rest, App, Acc);
 transform_meta([{Key, Value} | Rest], App, Acc) when is_atom(Value) ->
     transform_meta(Rest, App, [{splunk_key(Key), atom_to_list(Value)} | Acc]);
+transform_meta([{Key, Value} | Rest], App, Acc) when is_binary(Value) ->
+    transform_meta([{Key, binary_to_list(Value)} | Rest], App, Acc);
+transform_meta([{Key, Value} | Rest], App, Acc) when is_list(Value) ->
+    EscapedValue = ["\"", escape(Value), "\""],
+    transform_meta(Rest, App, [{splunk_key(Key), EscapedValue} | Acc]);
 transform_meta([{Key, Value} | Rest], App, Acc) ->
     transform_meta(Rest, App, [{splunk_key(Key), Value} | Acc]).
 
@@ -169,7 +174,7 @@ generic_meta_atom_value_test() ->
 
 generic_meta_dashed_key_test() ->
     Msg = lager_msg:new("msg", error, [{"k-e-y", "value"}], []),
-    ?assertEqual([{"k_e_y", "value"}], meta(Msg, "myapp")).
+    ?assertEqual([{"k_e_y", ["\"","value","\""]}], meta(Msg, "myapp")).
 
 format_test() ->
     Msg = lager_msg:new("'msg'", error, [{application, myapp},
@@ -180,7 +185,9 @@ format_test() ->
                                          {{measure, "mymeasure"}, 23},
                                          {{unique, "myunique"}, 1234},
                                          {{sample, "mysample"}, 42},
-                                         {key, value},
+                                         {atom, value},
+                                         {binary, <<"binary">>},
+                                         {string, "'test'\n"},
                                          {"dashed-key", "value"},
                                          {undefined_key, undefined}],
                         []),
@@ -189,8 +196,10 @@ format_test() ->
                    "severity=error "
                    "msg=\"\\'msg\\'\" "
                    "default=value "
-                   "dashed_key=value "
-                   "key=value "
+                   "dashed_key=\"value\" "
+                   "string=\"\\'test\\'\\n\" "
+                   "binary=\"binary\" "
+                   "atom=value "
                    "sample#myapp.mysample=42 "
                    "mysample=42 "
                    "unique#myapp.myunique=1234 "
