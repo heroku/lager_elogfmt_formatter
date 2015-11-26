@@ -39,7 +39,7 @@ severity(Msg) ->
 
 msg(Msg) ->
     Message = escape(lager_msg:message(Msg)),
-    {"msg", ["'", Message, "'"]}.
+    {"msg", ["\"", Message, "\""]}.
 
 meta(Msg, App) ->
     Meta = lager_msg:metadata(Msg),
@@ -115,8 +115,8 @@ severity_test() ->
 
 msg_test() ->
     Msg = lager_msg:new("\n\t\b\r'\"\\", error, [], []),
-    ?assertEqual({"msg", 
-                  ["'", ["\\n","\\t","\\b","\\r","\\'","\\\"","\\\\"], "'"]}, 
+    ?assertEqual({"msg",
+                  ["\"", ["\\n","\\t","\\b","\\r","\\'","\\\"","\\\\"], "\""]},
                  msg(Msg)).
 
 meta_ignore_pid_test() ->
@@ -187,7 +187,7 @@ format_test() ->
     Config = [{app, "myapp"}, {defaults, [{"default", "value"}]}],
     ?assertEqual(<<"app=myapp "
                    "severity=error "
-                   "msg='\\'msg\\'' "
+                   "msg=\"\\'msg\\'\" "
                    "default=value "
                    "dashed_key=value "
                    "key=value "
