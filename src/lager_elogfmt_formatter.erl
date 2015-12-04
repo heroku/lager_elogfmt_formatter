@@ -97,7 +97,8 @@ filter_undefined(Props) ->
     [{K, V} || {K, V} <- Props, V =/= undefined].
 
 escape(Msg) ->
-    lists:foldr(fun(C, Acc) -> [escape_char(C) | Acc] end, [], Msg).
+    FlatMsg = lists:flatten(Msg),
+    lists:foldr(fun(C, Acc) -> [escape_char(C) | Acc] end, [], FlatMsg).
 
 escape_char($\n) -> "\\n";
 escape_char($\t) -> "\\t";
@@ -122,6 +123,13 @@ msg_test() ->
     Msg = lager_msg:new("\n\t\b\r'\"\\", error, [], []),
     ?assertEqual({"msg",
                   ["\"", ["\\n","\\t","\\b","\\r","\\'","\\\"","\\\\"], "\""]},
+                 msg(Msg)).
+
+msg_iolist_test() ->
+    Msg = lager_msg:new(["\"", ["\n\t"],[["\b"]],"\r'\"\\"], error, [], []),
+    ?assertEqual({"msg",
+                  ["\"", ["\\\"","\\n","\\t","\\b","\\r","\\'","\\\"","\\\\"],
+                   "\""]},
                  msg(Msg)).
 
 meta_ignore_pid_test() ->
