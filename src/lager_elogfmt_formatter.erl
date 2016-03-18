@@ -6,7 +6,11 @@
         ]).
 
 -type default_entry() :: {string(), string()}.
--type config() :: [{app, string()} | {defaults, [default_entry()]}].
+-type mfa_entry() :: {string(), mfa()}.
+-type config() :: [{app, string()} |
+                   {defaults, [default_entry()]} |
+                   {mfa, mfa_entry()}
+                  ].
 
 %%====================================================================
 %% API functions
@@ -21,10 +25,13 @@ format(Msg, Config, _Color) ->
 format(Msg, Config) ->
     App = proplists:get_value(app, Config),
     Defaults = proplists:get_value(defaults, Config, []),
+    MFAs = [transform(Key, apply(M, F, A))
+            || {mfa, {Key, {M, F, A}}} <- proplists:lookup_all(mfa, Config)],
     Props = filter_undefined([{"app", App},
                               severity(Msg),
                               msg(Msg) |
                               Defaults ++
+                              MFAs ++
                               meta(Msg, App)
                              ]),
     elogfmt_core:logmessage(Props) ++ "\n".
@@ -78,15 +85,19 @@ transform_meta([{{unique, Key}, Value} | Rest], App, Acc) ->
 transform_meta([{_Key, undefined} | Rest], App, Acc) ->
     %% filter undefined values
     transform_meta(Rest, App, Acc);
-transform_meta([{Key, Value} | Rest], App, Acc) when is_atom(Value) ->
-    transform_meta(Rest, App, [{splunk_key(Key), atom_to_list(Value)} | Acc]);
-transform_meta([{Key, Value} | Rest], App, Acc) when is_binary(Value) ->
-    transform_meta([{Key, binary_to_list(Value)} | Rest], App, Acc);
-transform_meta([{Key, Value} | Rest], App, Acc) when is_list(Value) ->
-    EscapedValue = ["\"", escape(Value), "\""],
-    transform_meta(Rest, App, [{splunk_key(Key), EscapedValue} | Acc]);
 transform_meta([{Key, Value} | Rest], App, Acc) ->
-    transform_meta(Rest, App, [{splunk_key(Key), Value} | Acc]).
+    Transformed = transform(Key, Value),
+    transform_meta(Rest, App, [Transformed | Acc]).
+
+transform(Key, Value) when is_atom(Value) ->
+    {splunk_key(Key), atom_to_list(Value)};
+transform(Key, Value) when is_binary(Value) ->
+    transform(Key, binary_to_list(Value));
+transform(Key, Value) when is_list(Value) ->
+    EscapedValue = ["\"", escape(Value), "\""],
+    {splunk_key(Key), EscapedValue};
+transform(Key, Value) ->
+    {splunk_key(Key), Value}.
 
 splunk_key(Key) when is_atom(Key) ->
     splunk_key(atom_to_list(Key));
@@ -199,11 +210,15 @@ format_test() ->
                                          {"dashed-key", "value"},
                                          {undefined_key, undefined}],
                         []),
-    Config = [{app, "myapp"}, {defaults, [{"default", "value"}]}],
+    Config = [{app, "myapp"},
+              {defaults, [{"default", "value"}]},
+              {mfa, {"rand", {rand, uniform, [1]}}}
+             ],
     ?assertEqual(<<"app=myapp "
                    "severity=error "
                    "msg=\"\\'msg\\'\" "
                    "default=value "
+                   "rand=1 "
                    "dashed_key=\"value\" "
                    "string=\"\\'test\\'\\n\" "
                    "binary=\"binary\" "
