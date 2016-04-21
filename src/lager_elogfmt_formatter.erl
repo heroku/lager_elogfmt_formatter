@@ -22,12 +22,11 @@ format(Msg, Config) ->
     App = proplists:get_value(app, Config),
     Defaults = proplists:get_value(defaults, Config, []),
     Props = filter_undefined([{"app", App},
-                              severity(Msg),
-                              msg(Msg) |
+                              severity(Msg) |
                               Defaults ++
                               meta(Msg, App)
                              ]),
-    elogfmt_core:logmessage(Props) ++ "\n".
+    [elogfmt_core:logmessage(Props),  " ", lager_msg:message(Msg), "\n"].
 
 %%====================================================================
 %% Internal functions
@@ -36,10 +35,6 @@ format(Msg, Config) ->
 severity(Msg) ->
     Severity = lager_msg:severity(Msg),
     {"severity", atom_to_list(Severity)}.
-
-msg(Msg) ->
-    Message = escape(lager_msg:message(Msg)),
-    {"msg", ["\"", Message, "\""]}.
 
 meta(Msg, App) ->
     Meta = lager_msg:metadata(Msg),
@@ -119,18 +114,11 @@ severity_test() ->
     Msg = lager_msg:new("msg", error, [], []),
     ?assertEqual({"severity", "error"}, severity(Msg)).
 
-msg_test() ->
-    Msg = lager_msg:new("\n\t\b\r'\"\\", error, [], []),
-    ?assertEqual({"msg",
-                  ["\"", ["\\n","\\t","\\b","\\r","\\'","\\\"","\\\\"], "\""]},
-                 msg(Msg)).
-
-msg_iolist_test() ->
-    Msg = lager_msg:new(["\"", ["\n\t"],[["\b"]],"\r'\"\\"], error, [], []),
-    ?assertEqual({"msg",
-                  ["\"", ["\\\"","\\n","\\t","\\b","\\r","\\'","\\\"","\\\\"],
-                   "\""]},
-                 msg(Msg)).
+escape_test() ->
+    Msg = lager_msg:new("", error, [{test, "\n\t\b\r'\"\\"}], []),
+    ?assertEqual([{"test",
+                  ["\"", ["\\n","\\t","\\b","\\r","\\'","\\\"","\\\\"], "\""]}],
+                 meta(Msg, "myapp")).
 
 meta_ignore_pid_test() ->
     Msg = lager_msg:new("msg", error, [{pid, list_to_pid("<0.1.0>")}], []),
@@ -185,7 +173,7 @@ generic_meta_dashed_key_test() ->
     ?assertEqual([{"k_e_y", ["\"","value","\""]}], meta(Msg, "myapp")).
 
 format_test() ->
-    Msg = lager_msg:new("'msg'", error, [{application, myapp},
+    Msg = lager_msg:new("msg='msg'", error, [{application, myapp},
                                          {module, mymod},
                                          {function, myfun},
                                          {line, 100},
@@ -202,7 +190,6 @@ format_test() ->
     Config = [{app, "myapp"}, {defaults, [{"default", "value"}]}],
     ?assertEqual(<<"app=myapp "
                    "severity=error "
-                   "msg=\"\\'msg\\'\" "
                    "default=value "
                    "dashed_key=\"value\" "
                    "string=\"\\'test\\'\\n\" "
@@ -219,7 +206,8 @@ format_test() ->
                    "line=100 "
                    "function=myfun "
                    "module=mymod "
-                   "application=myapp"
+                   "application=myapp "
+                   "msg='msg'"
                    "\n">>,
                  list_to_binary(format(Msg, Config))).
 
