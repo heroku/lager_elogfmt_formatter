@@ -22,12 +22,11 @@ format(Msg, Config) ->
     App = proplists:get_value(app, Config),
     Defaults = proplists:get_value(defaults, Config, []),
     Props = filter_undefined([{"app", App},
-                              severity(Msg),
-                              msg(Msg) |
+                              severity(Msg) |
                               Defaults ++
                               meta(Msg, App)
                              ]),
-    elogfmt_core:logmessage(Props) ++ "\n".
+    [elogfmt_core:logmessage(Props),  " ", lager_msg:message(Msg), "\n"].
 
 %%====================================================================
 %% Internal functions
@@ -36,10 +35,6 @@ format(Msg, Config) ->
 severity(Msg) ->
     Severity = lager_msg:severity(Msg),
     {"severity", atom_to_list(Severity)}.
-
-msg(Msg) ->
-    Message = escape(lager_msg:message(Msg)),
-    {"msg", ["\"", Message, "\""]}.
 
 meta(Msg, App) ->
     Meta = lager_msg:metadata(Msg),
@@ -61,20 +56,16 @@ transform_meta([{function, Fun} | Rest], App, Acc) ->
     transform_meta(Rest, App, [{"function", atom_to_list(Fun)} | Acc]);
 transform_meta([{{count, Key}, Value} | Rest], App, Acc) ->
     MetricKey = ["count#", App, ".", Key],
-    transform_meta(Rest, App, [{MetricKey, Value},
-                               {splunk_key(Key), Value} | Acc]);
+    transform_meta(Rest, App, [{MetricKey, Value} | Acc]);
 transform_meta([{{measure, Key}, Value} | Rest], App, Acc) ->
     MetricKey = ["measure#", App, ".", Key],
-    transform_meta(Rest, App, [{MetricKey, Value},
-                               {splunk_key(Key), Value} | Acc]);
+    transform_meta(Rest, App, [{MetricKey, Value} | Acc]);
 transform_meta([{{sample, Key}, Value} | Rest], App, Acc) ->
     MetricKey = ["sample#", App, ".", Key],
-    transform_meta(Rest, App, [{MetricKey, Value},
-                               {splunk_key(Key), Value} | Acc]);
+    transform_meta(Rest, App, [{MetricKey, Value} | Acc]);
 transform_meta([{{unique, Key}, Value} | Rest], App, Acc) ->
     MetricKey = ["unique#", App, ".", Key],
-    transform_meta(Rest, App, [{MetricKey, Value},
-                               {splunk_key(Key), Value} | Acc]);
+    transform_meta(Rest, App, [{MetricKey, Value} | Acc]);
 transform_meta([{_Key, undefined} | Rest], App, Acc) ->
     %% filter undefined values
     transform_meta(Rest, App, Acc);
@@ -119,18 +110,11 @@ severity_test() ->
     Msg = lager_msg:new("msg", error, [], []),
     ?assertEqual({"severity", "error"}, severity(Msg)).
 
-msg_test() ->
-    Msg = lager_msg:new("\n\t\b\r'\"\\", error, [], []),
-    ?assertEqual({"msg",
-                  ["\"", ["\\n","\\t","\\b","\\r","\\'","\\\"","\\\\"], "\""]},
-                 msg(Msg)).
-
-msg_iolist_test() ->
-    Msg = lager_msg:new(["\"", ["\n\t"],[["\b"]],"\r'\"\\"], error, [], []),
-    ?assertEqual({"msg",
-                  ["\"", ["\\\"","\\n","\\t","\\b","\\r","\\'","\\\"","\\\\"],
-                   "\""]},
-                 msg(Msg)).
+escape_test() ->
+    Msg = lager_msg:new("", error, [{test, "\n\t\b\r'\"\\"}], []),
+    ?assertEqual([{"test",
+                  ["\"", ["\\n","\\t","\\b","\\r","\\'","\\\"","\\\\"], "\""]}],
+                 meta(Msg, "myapp")).
 
 meta_ignore_pid_test() ->
     Msg = lager_msg:new("msg", error, [{pid, list_to_pid("<0.1.0>")}], []),
@@ -154,26 +138,22 @@ meta_function_test() ->
 
 meta_count_test() ->
     Msg = lager_msg:new("msg", error, [{{count, "my_count"}, 42}], []),
-    ?assertEqual([{["count#", "myapp", ".", "my_count"], 42},
-                  {"my_count", 42}],
+    ?assertEqual([{["count#", "myapp", ".", "my_count"], 42}],
                  meta(Msg, "myapp")).
 
 meta_measure_test() ->
     Msg = lager_msg:new("msg", error, [{{measure, "my_measure"}, 23}], []),
-    ?assertEqual([{["measure#", "myapp", ".", "my_measure"], 23},
-                  {"my_measure", 23}],
+    ?assertEqual([{["measure#", "myapp", ".", "my_measure"], 23}],
                  meta(Msg, "myapp")).
 
 meta_sample_test() ->
     Msg = lager_msg:new("msg", error, [{{sample, "my_sample"}, 1}], []),
-    ?assertEqual([{["sample#", "myapp", ".", "my_sample"], 1},
-                  {"my_sample", 1}],
+    ?assertEqual([{["sample#", "myapp", ".", "my_sample"], 1}],
                  meta(Msg, "myapp")).
 
 meta_unique_test() ->
     Msg = lager_msg:new("msg", error, [{{unique, "my_unique"}, 1234}], []),
-    ?assertEqual([{["unique#", "myapp", ".", "my_unique"], 1234},
-                  {"my_unique", 1234}],
+    ?assertEqual([{["unique#", "myapp", ".", "my_unique"], 1234}],
                  meta(Msg, "myapp")).
 
 generic_meta_atom_value_test() ->
@@ -185,7 +165,7 @@ generic_meta_dashed_key_test() ->
     ?assertEqual([{"k_e_y", ["\"","value","\""]}], meta(Msg, "myapp")).
 
 format_test() ->
-    Msg = lager_msg:new("'msg'", error, [{application, myapp},
+    Msg = lager_msg:new("msg='msg'", error, [{application, myapp},
                                          {module, mymod},
                                          {function, myfun},
                                          {line, 100},
@@ -202,24 +182,20 @@ format_test() ->
     Config = [{app, "myapp"}, {defaults, [{"default", "value"}]}],
     ?assertEqual(<<"app=myapp "
                    "severity=error "
-                   "msg=\"\\'msg\\'\" "
                    "default=value "
                    "dashed_key=\"value\" "
                    "string=\"\\'test\\'\\n\" "
                    "binary=\"binary\" "
                    "atom=value "
                    "sample#myapp.mysample=42 "
-                   "mysample=42 "
                    "unique#myapp.myunique=1234 "
-                   "myunique=1234 "
                    "measure#myapp.mymeasure=23 "
-                   "mymeasure=23 "
                    "count#myapp.mycount=1 "
-                   "mycount=1 "
                    "line=100 "
                    "function=myfun "
                    "module=mymod "
-                   "application=myapp"
+                   "application=myapp "
+                   "msg='msg'"
                    "\n">>,
                  list_to_binary(format(Msg, Config))).
 

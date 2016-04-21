@@ -9,13 +9,13 @@ Additional metadata passed to logging calls with lager (when using the lager
 parse transform) will be included in logs:
 
 ```
-lager:error([{type, badarg}, {{count, "badarg"}, 1}], "failed to parse: ~w", [Input])
+lager:error([{type, badarg}, {{count, "badarg"}, 1}], "msg='failed to parse: ~w'", [Input])
 ```
 
 The output to this log call will include:
 
 ```
-app=myapp application=my_api module=parser function=parse line=42 severity=error type=badarg count#myapp.badarg=1 msg='failed to parse: ...'"
+app=myapp application=my_api module=parser function=parse line=42 severity=error type=badarg count#myapp.badarg=1 msg='failed to parse: ...'
 ```
 
 # Setup & Configuration
@@ -25,7 +25,7 @@ Include `lager_elogfmt_formatter` in your `rebar.config`:
 ```
 {deps, [
     {lager_elogfmt_formatter,
-     {git, "https://github.com/heroku/lager_elogfmt_formatter.git", {tag, "1.0.0"}}}
+     {git, "https://github.com/heroku/lager_elogfmt_formatter.git", {tag, "1.1.0"}}}
 ]}
 ```
 
