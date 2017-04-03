@@ -36,6 +36,8 @@ following configurations:
     log messages.
 * (Optional) `{defaults, [{string(), string()}]}`: Set other default entries
     which will occurr in all log messages.
+* (Optional) `{strip_pid, boolean()}`: Strip pid metadata from log messages. This
+    option is enabled by default.
 
 A lager configuration example looks like this:
 
@@ -57,4 +59,3 @@ Run the unit tests and type checker with:
 ```
 $ rebar3 eunit, dialyzer
 ```
-
