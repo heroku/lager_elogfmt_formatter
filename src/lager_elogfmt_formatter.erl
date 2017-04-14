@@ -21,11 +21,9 @@ format(Msg, Config, _Color) ->
 format(Msg, Config) ->
     App = proplists:get_value(app, Config),
     Defaults = proplists:get_value(defaults, Config, []),
-    Props = filter_undefined([{"app", App},
-                              severity(Msg) |
-                              Defaults ++
-                              meta(Msg, App)
-                             ]),
+    StripPid = proplists:get_value(strip_pid, Config, true),
+    Meta = meta(Msg, App),
+    Props = filter(StripPid, [{"app", App}, severity(Msg) | Defaults ++ Meta]),
     [elogfmt_core:logmessage(Props),  " ", lager_msg:message(Msg), "\n"].
 
 %%====================================================================
@@ -42,9 +40,10 @@ meta(Msg, App) ->
 
 transform_meta([], _App, Acc) ->
     Acc;
-transform_meta([{pid, _Pid} | Rest], App, Acc) ->
-    %% ignore pid
-    transform_meta(Rest, App, Acc);
+transform_meta([{pid, Pid} | Rest], App, Acc) when is_pid(Pid) ->
+    transform_meta([{pid, pid_to_list(Pid)} | Rest], App, Acc);
+transform_meta([{pid, Pid} | Rest], App, Acc) ->
+    transform_meta(Rest, App, [{"pid", Pid} | Acc]);
 transform_meta([{node, Node} | Rest], App, Acc) ->
     transform_meta(Rest, App, [{"node", atom_to_list(Node)} | Acc]);
 transform_meta([{application, Application} | Rest], App, Acc) ->
@@ -84,8 +83,9 @@ splunk_key(Key) when is_atom(Key) ->
 splunk_key(Key) ->
     re:replace(Key, "-", "_", [global, {return, list}]).
 
-filter_undefined(Props) ->
-    [{K, V} || {K, V} <- Props, V =/= undefined].
+filter(StripPid, Props) ->
+    [{K, V} || {K, V} <- Props, V =/= undefined,
+               not StripPid orelse K =/= "pid"].
 
 escape(Msg) ->
     FlatMsg = lists:flatten(Msg),
@@ -115,10 +115,6 @@ escape_test() ->
     ?assertEqual([{"test",
                   ["\"", ["\\n","\\t","\\b","\\r","\\'","\\\"","\\\\"], "\""]}],
                  meta(Msg, "myapp")).
-
-meta_ignore_pid_test() ->
-    Msg = lager_msg:new("msg", error, [{pid, list_to_pid("<0.1.0>")}], []),
-    ?assertEqual([], meta(Msg, "myapp")).
 
 meta_node_test() ->
     Msg = lager_msg:new("msg", error, [{node, node()}], []),
@@ -163,6 +159,24 @@ generic_meta_atom_value_test() ->
 generic_meta_dashed_key_test() ->
     Msg = lager_msg:new("msg", error, [{"k-e-y", "value"}], []),
     ?assertEqual([{"k_e_y", ["\"","value","\""]}], meta(Msg, "myapp")).
+
+format_ignore_pid_test() ->
+    Config = [{app, "myapp"}, {strip_pid, true}],
+    Msg = lager_msg:new("msg", error, [{pid, list_to_pid("<0.1.0>")}], []),
+    ?assertEqual(<<"app=myapp severity=error msg\n">>,
+                 iolist_to_binary(format(Msg, Config))).
+
+format_no_ignore_pid_test() ->
+    Config = [{app, "myapp"}, {strip_pid, false}],
+    Msg = lager_msg:new("msg", error, [{pid, list_to_pid("<0.1.0>")}], []),
+    ?assertEqual(<<"app=myapp severity=error pid=<0.1.0> msg\n">>,
+                 iolist_to_binary(format(Msg, Config))).
+
+format_no_ignore_string_pid_test() ->
+    Config = [{app, "myapp"}, {strip_pid, false}],
+    Msg = lager_msg:new("msg", error, [{pid, "<0.1.0>"}], []),
+    ?assertEqual(<<"app=myapp severity=error pid=<0.1.0> msg\n">>,
+                 iolist_to_binary(format(Msg, Config))).
 
 format_test() ->
     Msg = lager_msg:new("msg='msg'", error, [{application, myapp},
